@@ -33,6 +33,15 @@ let package = Package(
             dependencies: ["CPrintTrace"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
+            ],
+            linkerSettings: [
+                .linkedLibrary("printtrace"),
+                .unsafeFlags([
+                    "-L/usr/local/lib", 
+                    "-L/opt/homebrew/opt/opencv/lib",
+                    "-Xlinker", "-rpath", "-Xlinker", "/usr/local/lib",
+                    "-Xlinker", "-rpath", "-Xlinker", "/opt/homebrew/opt/opencv/lib"
+                ])
             ]
         ),
         
