@@ -53,6 +53,33 @@ public final class PrintTrace: ObservableObject {
         return String(cString: print_trace_get_version())
     }
     
+    nonisolated public static func getParameterRanges() -> ParameterRanges {
+        var cRanges = PrintTraceParamRanges()
+        print_trace_get_param_ranges(&cRanges)
+        
+        return ParameterRanges(
+            warpSizeRange: cRanges.warp_size_min...cRanges.warp_size_max,
+            realWorldSizeRange: cRanges.real_world_size_mm_min...cRanges.real_world_size_mm_max,
+            cannyLowerRange: cRanges.canny_lower_min...cRanges.canny_lower_max,
+            cannyUpperRange: cRanges.canny_upper_min...cRanges.canny_upper_max,
+            cannyApertureRange: 3...7, // Based on canny_aperture_values array
+            claheClipLimitRange: cRanges.clahe_clip_limit_min...cRanges.clahe_clip_limit_max,
+            claheTileSizeRange: cRanges.clahe_tile_size_min...cRanges.clahe_tile_size_max,
+            minContourAreaRange: cRanges.min_contour_area_min...cRanges.min_contour_area_max,
+            minSolidityRange: cRanges.min_solidity_min...cRanges.min_solidity_max,
+            maxAspectRatioRange: cRanges.max_aspect_ratio_min...cRanges.max_aspect_ratio_max,
+            polygonEpsilonFactorRange: cRanges.polygon_epsilon_factor_min...cRanges.polygon_epsilon_factor_max,
+            cornerWinSizeRange: cRanges.corner_win_size_min...cRanges.corner_win_size_max,
+            minPerimeterRange: cRanges.min_perimeter_min...cRanges.min_perimeter_max,
+            dilationAmountRange: cRanges.dilation_amount_mm_min...cRanges.dilation_amount_mm_max,
+            smoothingAmountRange: cRanges.smoothing_amount_mm_min...cRanges.smoothing_amount_mm_max,
+            manualThresholdRange: cRanges.manual_threshold_min...cRanges.manual_threshold_max,
+            thresholdOffsetRange: cRanges.threshold_offset_min...cRanges.threshold_offset_max,
+            morphKernelSizeRange: cRanges.morph_kernel_size_min...cRanges.morph_kernel_size_max,
+            contourMergeDistanceRange: cRanges.contour_merge_distance_mm_min...cRanges.contour_merge_distance_mm_max
+        )
+    }
+    
     // MARK: - Main Processing Methods
     
     public func processImage(
@@ -90,6 +117,7 @@ public final class PrintTrace: ObservableObject {
         }
     }
     
+    
     public func processImageToDXF(
         imagePath: String,
         outputPath: String,
@@ -113,6 +141,47 @@ public final class PrintTrace: ObservableObject {
             outputPath: outputPath,
             parameters: parameters
         )
+    }
+    
+    public func processImageToStage(
+        at imagePath: String,
+        toStage stage: PipelineStage,
+        parameters: ProcessingParameters = .default
+    ) async throws -> StageProcessingResult {
+        
+        guard !isProcessing else {
+            throw PrintTraceError.processingFailed("Already processing another image")
+        }
+        
+        isProcessing = true
+        lastError = nil
+        
+        defer {
+            isProcessing = false
+            progress = nil
+        }
+        
+        let startTime = Date()
+        
+        do {
+            let (imageData, contour) = try await processImageToStageInternal(
+                imagePath: imagePath,
+                stage: stage,
+                parameters: parameters
+            )
+            let processingTime = Date().timeIntervalSince(startTime)
+            
+            return StageProcessingResult(
+                stage: stage,
+                imageData: imageData,
+                contour: contour,
+                processingTime: processingTime,
+                parameters: parameters
+            )
+        } catch {
+            lastError = error as? PrintTraceError ?? PrintTraceError.unknown(error.localizedDescription)
+            throw error
+        }
     }
     
     public func cancel() {
@@ -252,6 +321,88 @@ public final class PrintTrace: ObservableObject {
             }
         }
     }
+    
+    private func processImageToStageInternal(
+        imagePath: String,
+        stage: PipelineStage,
+        parameters: ProcessingParameters
+    ) async throws -> (Data?, ProcessedContour?) {
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            currentTask = Task {
+                var cParams = parameters.toCStruct()
+                var imageData = PrintTraceImageData()
+                var contour = PrintTraceContour(points: nil, point_count: 0, pixels_per_mm: 0.0)
+                
+                let context = CallbackContext(printTrace: self)
+                let contextPtr = Unmanaged.passRetained(context).toOpaque()
+                
+                let progressCallback: PrintTraceProgressCallback = { progress, stage, userData in
+                    guard let userData = userData,
+                          let stage = stage else { return }
+                    
+                    let context = Unmanaged<CallbackContext>.fromOpaque(userData).takeUnretainedValue()
+                    let stageString = String(cString: stage)
+                    
+                    Task { @MainActor in
+                        context.printTrace?.progress = ProcessingProgress(
+                            progress: progress,
+                            stage: stageString
+                        )
+                    }
+                }
+                
+                let errorCallback: PrintTraceErrorCallback = { errorCode, message, userData in
+                    // Error details are handled in the main result check
+                }
+                
+                defer {
+                    Unmanaged<CallbackContext>.fromOpaque(contextPtr).release()
+                    print_trace_free_contour(&contour)
+                    print_trace_free_image_data(&imageData)
+                }
+                
+                let result = imagePath.withCString { cImagePath in
+                    return print_trace_process_to_stage(
+                        cImagePath,
+                        &cParams,
+                        PrintTraceProcessingStage(UInt32(stage.rawValue)),
+                        &imageData,
+                        &contour,
+                        progressCallback,
+                        errorCallback,
+                        contextPtr
+                    )
+                }
+                
+                if result == PRINT_TRACE_SUCCESS {
+                    do {
+                        // Convert image data
+                        var swiftImageData: Data?
+                        if imageData.width > 0 && imageData.height > 0, let dataPtr = imageData.data {
+                            let dataSize = Int(imageData.bytes_per_row * imageData.height)
+                            swiftImageData = Data(bytes: dataPtr, count: dataSize)
+                        }
+                        
+                        // Convert contour if available
+                        var swiftContour: ProcessedContour?
+                        if contour.point_count > 0 {
+                            swiftContour = try convertContour(contour)
+                        }
+                        
+                        continuation.resume(returning: (swiftImageData, swiftContour))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                } else {
+                    let message = String(cString: print_trace_get_error_message(result))
+                    let error = convertError(result, message: message)
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
 }
 
 // MARK: - Callback Context
@@ -276,6 +427,13 @@ private extension ProcessingParameters {
             canny_aperture: cannyAperture,
             clahe_clip_limit: claheClipLimit,
             clahe_tile_size: claheTileSize,
+            use_adaptive_threshold: useAdaptiveThreshold,
+            manual_threshold: manualThreshold,
+            threshold_offset: thresholdOffset,
+            disable_morphology: disableMorphology,
+            morph_kernel_size: morphKernelSize,
+            merge_nearby_contours: mergeNearbyContours,
+            contour_merge_distance_mm: contourMergeDistanceMM,
             min_contour_area: minContourArea,
             min_solidity: minSolidity,
             max_aspect_ratio: maxAspectRatio,
@@ -303,6 +461,7 @@ nonisolated private func convertContour(_ cContour: PrintTraceContour) throws ->
     
     return ProcessedContour(points: swiftPoints, pixelsPerMM: cContour.pixels_per_mm)
 }
+
 
 nonisolated private func convertError(_ result: PrintTraceResult, message: String) -> PrintTraceError {
     switch result {

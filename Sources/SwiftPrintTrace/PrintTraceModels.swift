@@ -41,10 +41,37 @@ public struct ProcessingParameters: Sendable {
     // Debug output
     public var enableDebugOutput: Bool = false
     
+    // Object detection parameters
+    public var useAdaptiveThreshold: Bool = false
+    public var manualThreshold: Double = 0.0 // 0 = auto
+    public var thresholdOffset: Double = 0.0 // -50 to +50
+    
+    // Morphological processing parameters
+    public var disableMorphology: Bool = false
+    public var morphKernelSize: Int32 = 5 // 3-15
+    
+    // Multi-contour detection parameters
+    public var mergeNearbyContours: Bool = true
+    public var contourMergeDistanceMM: Double = 5.0 // 1-20
+    
     public init() {}
     
     // Preset configurations
     public static let `default` = ProcessingParameters()
+    
+    public static var preserveDetail: ProcessingParameters {
+        var params = ProcessingParameters()
+        params.disableMorphology = true
+        params.mergeNearbyContours = false
+        return params
+    }
+    
+    public static var multiContour: ProcessingParameters {
+        var params = ProcessingParameters()
+        params.contourMergeDistanceMM = 10.0
+        params.mergeNearbyContours = true
+        return params
+    }
     
     public static var highPrecision: ProcessingParameters {
         var params = ProcessingParameters()
@@ -145,6 +172,122 @@ public struct ProcessedContour: Sendable {
             perimeter += sqrt(dx * dx + dy * dy)
         }
         self.perimeter = perimeter / pixelsPerMM
+    }
+}
+
+// MARK: - Parameter Range Information
+
+public struct ParameterRanges: Sendable {
+    public let warpSizeRange: ClosedRange<Int32>
+    public let realWorldSizeRange: ClosedRange<Double>
+    public let cannyLowerRange: ClosedRange<Double>
+    public let cannyUpperRange: ClosedRange<Double>
+    public let cannyApertureRange: ClosedRange<Int32>
+    public let claheClipLimitRange: ClosedRange<Double>
+    public let claheTileSizeRange: ClosedRange<Int32>
+    public let minContourAreaRange: ClosedRange<Double>
+    public let minSolidityRange: ClosedRange<Double>
+    public let maxAspectRatioRange: ClosedRange<Double>
+    public let polygonEpsilonFactorRange: ClosedRange<Double>
+    public let cornerWinSizeRange: ClosedRange<Int32>
+    public let minPerimeterRange: ClosedRange<Double>
+    public let dilationAmountRange: ClosedRange<Double>
+    public let smoothingAmountRange: ClosedRange<Double>
+    public let manualThresholdRange: ClosedRange<Double>
+    public let thresholdOffsetRange: ClosedRange<Double>
+    public let morphKernelSizeRange: ClosedRange<Int32>
+    public let contourMergeDistanceRange: ClosedRange<Double>
+    
+    internal init(
+        warpSizeRange: ClosedRange<Int32>,
+        realWorldSizeRange: ClosedRange<Double>,
+        cannyLowerRange: ClosedRange<Double>,
+        cannyUpperRange: ClosedRange<Double>,
+        cannyApertureRange: ClosedRange<Int32>,
+        claheClipLimitRange: ClosedRange<Double>,
+        claheTileSizeRange: ClosedRange<Int32>,
+        minContourAreaRange: ClosedRange<Double>,
+        minSolidityRange: ClosedRange<Double>,
+        maxAspectRatioRange: ClosedRange<Double>,
+        polygonEpsilonFactorRange: ClosedRange<Double>,
+        cornerWinSizeRange: ClosedRange<Int32>,
+        minPerimeterRange: ClosedRange<Double>,
+        dilationAmountRange: ClosedRange<Double>,
+        smoothingAmountRange: ClosedRange<Double>,
+        manualThresholdRange: ClosedRange<Double>,
+        thresholdOffsetRange: ClosedRange<Double>,
+        morphKernelSizeRange: ClosedRange<Int32>,
+        contourMergeDistanceRange: ClosedRange<Double>
+    ) {
+        self.warpSizeRange = warpSizeRange
+        self.realWorldSizeRange = realWorldSizeRange
+        self.cannyLowerRange = cannyLowerRange
+        self.cannyUpperRange = cannyUpperRange
+        self.cannyApertureRange = cannyApertureRange
+        self.claheClipLimitRange = claheClipLimitRange
+        self.claheTileSizeRange = claheTileSizeRange
+        self.minContourAreaRange = minContourAreaRange
+        self.minSolidityRange = minSolidityRange
+        self.maxAspectRatioRange = maxAspectRatioRange
+        self.polygonEpsilonFactorRange = polygonEpsilonFactorRange
+        self.cornerWinSizeRange = cornerWinSizeRange
+        self.minPerimeterRange = minPerimeterRange
+        self.dilationAmountRange = dilationAmountRange
+        self.smoothingAmountRange = smoothingAmountRange
+        self.manualThresholdRange = manualThresholdRange
+        self.thresholdOffsetRange = thresholdOffsetRange
+        self.morphKernelSizeRange = morphKernelSizeRange
+        self.contourMergeDistanceRange = contourMergeDistanceRange
+    }
+}
+
+// MARK: - Pipeline Stage
+
+public enum PipelineStage: Int32, CaseIterable, Sendable {
+    case loaded = 0
+    case lightboxCropped = 1
+    case normalized = 2
+    case boundaryDetected = 3
+    case objectDetected = 4
+    case smoothed = 5
+    case dilated = 6
+    case final = 7
+    
+    public var description: String {
+        switch self {
+        case .loaded: return "Image Loaded"
+        case .lightboxCropped: return "Lightbox Cropped"
+        case .normalized: return "Normalized"
+        case .boundaryDetected: return "Boundary Detected"
+        case .objectDetected: return "Object Detected"
+        case .smoothed: return "Smoothed"
+        case .dilated: return "Dilated"
+        case .final: return "Final Result"
+        }
+    }
+}
+
+// MARK: - Stage Processing Result
+
+public struct StageProcessingResult: Sendable {
+    public let stage: PipelineStage
+    public let imageData: Data?
+    public let contour: ProcessedContour?
+    public let processingTime: TimeInterval
+    public let parameters: ProcessingParameters
+    
+    public init(
+        stage: PipelineStage,
+        imageData: Data?,
+        contour: ProcessedContour?,
+        processingTime: TimeInterval,
+        parameters: ProcessingParameters
+    ) {
+        self.stage = stage
+        self.imageData = imageData
+        self.contour = contour
+        self.processingTime = processingTime
+        self.parameters = parameters
     }
 }
 

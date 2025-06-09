@@ -50,6 +50,92 @@ final class SwiftPrintTraceTests: XCTestCase {
         XCTAssertTrue(version.contains("."))
     }
     
+    func testParameterRanges() {
+        let ranges = PrintTrace.getParameterRanges()
+        
+        // Test that ranges are reasonable
+        XCTAssertGreaterThan(ranges.warpSizeRange.upperBound, ranges.warpSizeRange.lowerBound)
+        XCTAssertGreaterThan(ranges.realWorldSizeRange.upperBound, 0)
+        XCTAssertGreaterThan(ranges.cannyLowerRange.upperBound, 0)
+        XCTAssertGreaterThan(ranges.cannyUpperRange.upperBound, ranges.cannyLowerRange.upperBound)
+        XCTAssertGreaterThan(ranges.claheClipLimitRange.upperBound, 0)
+        XCTAssertGreaterThan(ranges.minContourAreaRange.upperBound, 0)
+        XCTAssertLessThanOrEqual(ranges.minSolidityRange.upperBound, 1.0)
+        XCTAssertGreaterThan(ranges.maxAspectRatioRange.upperBound, 1.0)
+        XCTAssertGreaterThan(ranges.polygonEpsilonFactorRange.upperBound, 0)
+        XCTAssertGreaterThanOrEqual(ranges.thresholdOffsetRange.lowerBound, -50.0)
+        XCTAssertLessThanOrEqual(ranges.thresholdOffsetRange.upperBound, 50.0)
+        XCTAssertGreaterThan(ranges.morphKernelSizeRange.upperBound, 0)
+        XCTAssertGreaterThan(ranges.contourMergeDistanceRange.upperBound, 0)
+        
+        print("✅ Parameter ranges - Warp size: \(ranges.warpSizeRange), Real world: \(ranges.realWorldSizeRange)")
+    }
+    
+    func testNewParameterFeatures() {
+        // Test new parameter presets
+        let preserveDetail = ProcessingParameters.preserveDetail
+        XCTAssertTrue(preserveDetail.disableMorphology)
+        XCTAssertFalse(preserveDetail.mergeNearbyContours)
+        
+        let multiContour = ProcessingParameters.multiContour
+        XCTAssertTrue(multiContour.mergeNearbyContours)
+        XCTAssertEqual(multiContour.contourMergeDistanceMM, 10.0)
+        
+        // Test new parameter validation
+        var params = ProcessingParameters()
+        params.thresholdOffset = 25.0
+        params.morphKernelSize = 7
+        params.contourMergeDistanceMM = 15.0
+        params.useAdaptiveThreshold = true
+        params.manualThreshold = 128.0
+        
+        XCTAssertNoThrow(try PrintTrace.validateParameters(params))
+        
+        print("✅ New parameter features - Preserve detail and multi-contour presets work")
+    }
+    
+    @MainActor
+    func testPipelineStageProcessing() async throws {
+        guard let testImagePath = getTestImagePath() else {
+            print("⚠️ Test image not found - skipping pipeline stage test")
+            return
+        }
+        
+        let printTrace = PrintTrace()
+        let parameters = ProcessingParameters.default
+        
+        // Test processing to different stages
+        let stages: [PipelineStage] = [.loaded, .lightboxCropped, .normalized, .final]
+        
+        for stage in stages {
+            do {
+                let result = try await printTrace.processImageToStage(
+                    at: testImagePath,
+                    toStage: stage,
+                    parameters: parameters
+                )
+                
+                XCTAssertEqual(result.stage, stage)
+                XCTAssertNotNil(result.imageData, "Stage \(stage) should have image data")
+                XCTAssertGreaterThan(result.processingTime, 0)
+                
+                // Only final stages should have contours
+                if stage == .final {
+                    XCTAssertNotNil(result.contour, "Final stage should have contour")
+                    if let contour = result.contour {
+                        XCTAssertGreaterThan(contour.pointCount, 0)
+                        XCTAssertGreaterThan(contour.area, 0)
+                    }
+                }
+                
+                print("✅ Stage \(stage.description) - Image data: \(result.imageData?.count ?? 0) bytes, Contour: \(result.contour?.pointCount ?? 0) points")
+                
+            } catch {
+                XCTFail("Failed to process to stage \(stage): \(error)")
+            }
+        }
+    }
+    
     func testContourCalculations() {
         // Test contour with simple square
         let points = [
@@ -124,7 +210,7 @@ final class SwiftPrintTraceTests: XCTestCase {
             
             // Track progress updates
             var progressUpdates: [ProcessingProgress] = []
-            let progressExpectation = expectation(description: "Progress updates for \(description)")
+            let progressExpectation = self.expectation(description: "Progress updates for \(description)")
             progressExpectation.isInverted = true // We expect this NOT to be fulfilled quickly
             
             // Monitor progress changes
@@ -172,7 +258,7 @@ final class SwiftPrintTraceTests: XCTestCase {
             cancellable.cancel()
             
             // Brief wait to allow any final progress updates
-            await fulfillment(of: [progressExpectation], timeout: 0.1)
+            await self.fulfillment(of: [progressExpectation], timeout: 0.1)
             
             // Verify we got progress updates (with new callback system)
             print("Received \(progressUpdates.count) progress updates")
@@ -280,7 +366,7 @@ final class SwiftPrintTraceTests: XCTestCase {
         
         print("🔍 Searched for test image in:")
         print("   Bundle path: \(bundle.bundlePath)")
-        print("   Bundle resource paths: \(bundle.paths(forResourcesOfType: "jpeg", inDirectory: nil))")
+        print("   Bundle resource paths: \(bundle.paths(forResourcesOfType: "jpeg", inDirectory: nil as String?))")
         
         return nil
     }
