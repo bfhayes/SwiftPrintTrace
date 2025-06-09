@@ -1,0 +1,5 @@
+module CPrintTrace {
+    header "shim.h"
+    link "printtrace"
+    export *
+}
