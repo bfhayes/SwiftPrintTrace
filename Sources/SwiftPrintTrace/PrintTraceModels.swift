@@ -4,9 +4,12 @@ import CoreGraphics
 // MARK: - Processing Parameters
 
 public struct ProcessingParameters: Sendable {
-    // Core parameters
-    public var warpSize: Int32 = 3240
-    public var realWorldSizeMM: Double = 162.0
+    // Lightbox dimensions after perspective correction
+    public var lightboxWidthPx: Int32 = 1620
+    public var lightboxHeightPx: Int32 = 1620
+    public var lightboxWidthMM: Double = 162.0
+    public var lightboxHeightMM: Double = 162.0
+    public var pixelsPerMM: Double = 10.0
     
     // Edge detection (CAD-optimized)
     public var cannyLower: Double = 50.0
@@ -37,6 +40,10 @@ public struct ProcessingParameters: Sendable {
     public var dilationAmountMM: Double = 0.0
     public var enableSmoothing: Bool = false
     public var smoothingAmountMM: Double = 0.2
+    public var smoothingMode: Int32 = 1 // 0=morphological, 1=curvature-based
+    
+    // Performance optimization
+    public var enableInpainting: Bool = false
     
     // Debug output
     public var enableDebugOutput: Bool = false
@@ -90,7 +97,8 @@ public struct ProcessingParameters: Sendable {
     
     public static var fastProcessing: ProcessingParameters {
         var params = ProcessingParameters()
-        params.warpSize = 1620
+        params.lightboxWidthPx = 810
+        params.lightboxHeightPx = 810
         params.polygonEpsilonFactor = 0.01
         params.enableSubPixelRefinement = false
         return params
@@ -178,8 +186,11 @@ public struct ProcessedContour: Sendable {
 // MARK: - Parameter Range Information
 
 public struct ParameterRanges: Sendable {
-    public let warpSizeRange: ClosedRange<Int32>
-    public let realWorldSizeRange: ClosedRange<Double>
+    internal let lightboxWidthPxRange: ClosedRange<Int32>
+    internal let lightboxHeightPxRange: ClosedRange<Int32>
+    public let lightboxWidthMMRange: ClosedRange<Double>
+    public let lightboxHeightMMRange: ClosedRange<Double>
+    public let pixelsPerMMRange: ClosedRange<Double>
     public let cannyLowerRange: ClosedRange<Double>
     public let cannyUpperRange: ClosedRange<Double>
     public let cannyApertureRange: ClosedRange<Int32>
@@ -193,14 +204,18 @@ public struct ParameterRanges: Sendable {
     public let minPerimeterRange: ClosedRange<Double>
     public let dilationAmountRange: ClosedRange<Double>
     public let smoothingAmountRange: ClosedRange<Double>
+    public let smoothingModeRange: ClosedRange<Int32>
     public let manualThresholdRange: ClosedRange<Double>
     public let thresholdOffsetRange: ClosedRange<Double>
     public let morphKernelSizeRange: ClosedRange<Int32>
     public let contourMergeDistanceRange: ClosedRange<Double>
     
     internal init(
-        warpSizeRange: ClosedRange<Int32>,
-        realWorldSizeRange: ClosedRange<Double>,
+        lightboxWidthPxRange: ClosedRange<Int32>,
+        lightboxHeightPxRange: ClosedRange<Int32>,
+        lightboxWidthMMRange: ClosedRange<Double>,
+        lightboxHeightMMRange: ClosedRange<Double>,
+        pixelsPerMMRange: ClosedRange<Double>,
         cannyLowerRange: ClosedRange<Double>,
         cannyUpperRange: ClosedRange<Double>,
         cannyApertureRange: ClosedRange<Int32>,
@@ -214,13 +229,17 @@ public struct ParameterRanges: Sendable {
         minPerimeterRange: ClosedRange<Double>,
         dilationAmountRange: ClosedRange<Double>,
         smoothingAmountRange: ClosedRange<Double>,
+        smoothingModeRange: ClosedRange<Int32>,
         manualThresholdRange: ClosedRange<Double>,
         thresholdOffsetRange: ClosedRange<Double>,
         morphKernelSizeRange: ClosedRange<Int32>,
         contourMergeDistanceRange: ClosedRange<Double>
     ) {
-        self.warpSizeRange = warpSizeRange
-        self.realWorldSizeRange = realWorldSizeRange
+        self.lightboxWidthPxRange = lightboxWidthPxRange
+        self.lightboxHeightPxRange = lightboxHeightPxRange
+        self.lightboxWidthMMRange = lightboxWidthMMRange
+        self.lightboxHeightMMRange = lightboxHeightMMRange
+        self.pixelsPerMMRange = pixelsPerMMRange
         self.cannyLowerRange = cannyLowerRange
         self.cannyUpperRange = cannyUpperRange
         self.cannyApertureRange = cannyApertureRange
@@ -234,6 +253,7 @@ public struct ParameterRanges: Sendable {
         self.minPerimeterRange = minPerimeterRange
         self.dilationAmountRange = dilationAmountRange
         self.smoothingAmountRange = smoothingAmountRange
+        self.smoothingModeRange = smoothingModeRange
         self.manualThresholdRange = manualThresholdRange
         self.thresholdOffsetRange = thresholdOffsetRange
         self.morphKernelSizeRange = morphKernelSizeRange

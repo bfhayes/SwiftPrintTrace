@@ -16,7 +16,7 @@ let package = Package(
         )
     ],
     targets: [
-        // System library target
+        // System library target for macOS/Linux
         .systemLibrary(
             name: "CPrintTrace",
             pkgConfig: "printtrace",
@@ -27,21 +27,32 @@ let package = Package(
             ]
         ),
         
+        // Binary framework target for iOS (uncomment when XCFramework is available)
+        // .binaryTarget(
+        //     name: "PrintTraceFramework",
+        //     path: "Frameworks/PrintTrace.xcframework"
+        // ),
+        
         // Swift wrapper
         .target(
             name: "SwiftPrintTrace",
-            dependencies: ["CPrintTrace"],
+            dependencies: [
+                .target(name: "CPrintTrace")
+                // TODO: Add iOS framework dependency when XCFramework is built:
+                // .target(name: "PrintTraceFramework", condition: .when(platforms: [.iOS, .tvOS, .watchOS]))
+            ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ],
             linkerSettings: [
-                .linkedLibrary("printtrace"),
+                // macOS/Linux linking
+                .linkedLibrary("printtrace", .when(platforms: [.macOS, .linux])),
                 .unsafeFlags([
                     "-L/usr/local/lib", 
                     "-L/opt/homebrew/opt/opencv/lib",
                     "-Xlinker", "-rpath", "-Xlinker", "/usr/local/lib",
                     "-Xlinker", "-rpath", "-Xlinker", "/opt/homebrew/opt/opencv/lib"
-                ])
+                ], .when(platforms: [.macOS, .linux]))
             ]
         ),
         
@@ -53,29 +64,29 @@ let package = Package(
                 .copy("TestImages/")
             ],
             linkerSettings: [
-                .linkedLibrary("printtrace"),
+                .linkedLibrary("printtrace", .when(platforms: [.macOS, .linux])),
                 .unsafeFlags([
                     "-L/usr/local/lib", 
                     "-L/opt/homebrew/opt/opencv/lib",
                     "-Xlinker", "-rpath", "-Xlinker", "/usr/local/lib",
                     "-Xlinker", "-rpath", "-Xlinker", "/opt/homebrew/opt/opencv/lib"
-                ])
+                ], .when(platforms: [.macOS, .linux]))
             ]
         ),
         
-        // Example executable (optional)
+        // Example executable (macOS/Linux only)
         .executableTarget(
             name: "SwiftPrintTraceExample",
             dependencies: ["SwiftPrintTrace"],
             path: "Examples/CLI",
             linkerSettings: [
-                .linkedLibrary("printtrace"),
+                .linkedLibrary("printtrace", .when(platforms: [.macOS, .linux])),
                 .unsafeFlags([
                     "-L/usr/local/lib", 
                     "-L/opt/homebrew/opt/opencv/lib",
                     "-Xlinker", "-rpath", "-Xlinker", "/usr/local/lib",
                     "-Xlinker", "-rpath", "-Xlinker", "/opt/homebrew/opt/opencv/lib"
-                ])
+                ], .when(platforms: [.macOS, .linux]))
             ]
         )
     ]

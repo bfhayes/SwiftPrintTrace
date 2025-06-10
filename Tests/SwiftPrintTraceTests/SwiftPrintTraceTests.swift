@@ -12,7 +12,7 @@ final class SwiftPrintTraceTests: XCTestCase {
         
         // Test invalid parameters
         var invalidParams = ProcessingParameters()
-        invalidParams.warpSize = -100
+        invalidParams.lightboxWidthPx = -100
         XCTAssertThrowsError(try PrintTrace.validateParameters(invalidParams))
     }
     
@@ -40,7 +40,7 @@ final class SwiftPrintTraceTests: XCTestCase {
         XCTAssertEqual(printing3D.smoothingAmountMM, 0.3)
         
         let fastProcessing = ProcessingParameters.fastProcessing
-        XCTAssertEqual(fastProcessing.warpSize, 1620)
+        XCTAssertEqual(fastProcessing.lightboxWidthPx, 810)
         XCTAssertFalse(fastProcessing.enableSubPixelRefinement)
     }
     
@@ -53,9 +53,9 @@ final class SwiftPrintTraceTests: XCTestCase {
     func testParameterRanges() {
         let ranges = PrintTrace.getParameterRanges()
         
-        // Test that ranges are reasonable
-        XCTAssertGreaterThan(ranges.warpSizeRange.upperBound, ranges.warpSizeRange.lowerBound)
-        XCTAssertGreaterThan(ranges.realWorldSizeRange.upperBound, 0)
+        // Test that ranges are reasonable  
+        XCTAssertGreaterThan(ranges.lightboxWidthMMRange.upperBound, ranges.lightboxWidthMMRange.lowerBound)
+        XCTAssertGreaterThan(ranges.lightboxHeightMMRange.upperBound, 0)
         XCTAssertGreaterThan(ranges.cannyLowerRange.upperBound, 0)
         XCTAssertGreaterThan(ranges.cannyUpperRange.upperBound, ranges.cannyLowerRange.upperBound)
         XCTAssertGreaterThan(ranges.claheClipLimitRange.upperBound, 0)
@@ -68,7 +68,7 @@ final class SwiftPrintTraceTests: XCTestCase {
         XCTAssertGreaterThan(ranges.morphKernelSizeRange.upperBound, 0)
         XCTAssertGreaterThan(ranges.contourMergeDistanceRange.upperBound, 0)
         
-        print("✅ Parameter ranges - Warp size: \(ranges.warpSizeRange), Real world: \(ranges.realWorldSizeRange)")
+        print("✅ Parameter ranges - Lightbox width: \(ranges.lightboxWidthMMRange), Height: \(ranges.lightboxHeightMMRange), Pixels/mm: \(ranges.pixelsPerMMRange)")
     }
     
     func testNewParameterFeatures() {
@@ -237,7 +237,7 @@ final class SwiftPrintTraceTests: XCTestCase {
                                    "Should have calculated positive perimeter")
                 XCTAssertGreaterThan(result.processingTime, 0, 
                                    "Should have positive processing time")
-                XCTAssertEqual(result.parameters.warpSize, parameters.warpSize, 
+                XCTAssertEqual(result.parameters.lightboxWidthPx, parameters.lightboxWidthPx, 
                              "Should preserve parameter values")
                 
                 // Verify reasonable values for pliers image

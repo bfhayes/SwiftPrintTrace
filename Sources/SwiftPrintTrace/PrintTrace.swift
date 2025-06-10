@@ -58,8 +58,11 @@ public final class PrintTrace: ObservableObject {
         print_trace_get_param_ranges(&cRanges)
         
         return ParameterRanges(
-            warpSizeRange: cRanges.warp_size_min...cRanges.warp_size_max,
-            realWorldSizeRange: cRanges.real_world_size_mm_min...cRanges.real_world_size_mm_max,
+            lightboxWidthPxRange: cRanges.lightbox_width_px_min...cRanges.lightbox_width_px_max,
+            lightboxHeightPxRange: cRanges.lightbox_height_px_min...cRanges.lightbox_height_px_max,
+            lightboxWidthMMRange: cRanges.lightbox_width_mm_min...cRanges.lightbox_width_mm_max,
+            lightboxHeightMMRange: cRanges.lightbox_height_mm_min...cRanges.lightbox_height_mm_max,
+            pixelsPerMMRange: cRanges.pixels_per_mm_min...cRanges.pixels_per_mm_max,
             cannyLowerRange: cRanges.canny_lower_min...cRanges.canny_lower_max,
             cannyUpperRange: cRanges.canny_upper_min...cRanges.canny_upper_max,
             cannyApertureRange: 3...7, // Based on canny_aperture_values array
@@ -73,6 +76,7 @@ public final class PrintTrace: ObservableObject {
             minPerimeterRange: cRanges.min_perimeter_min...cRanges.min_perimeter_max,
             dilationAmountRange: cRanges.dilation_amount_mm_min...cRanges.dilation_amount_mm_max,
             smoothingAmountRange: cRanges.smoothing_amount_mm_min...cRanges.smoothing_amount_mm_max,
+            smoothingModeRange: cRanges.smoothing_mode_min...cRanges.smoothing_mode_max,
             manualThresholdRange: cRanges.manual_threshold_min...cRanges.manual_threshold_max,
             thresholdOffsetRange: cRanges.threshold_offset_min...cRanges.threshold_offset_max,
             morphKernelSizeRange: cRanges.morph_kernel_size_min...cRanges.morph_kernel_size_max,
@@ -420,8 +424,11 @@ private final class CallbackContext {
 private extension ProcessingParameters {
     func toCStruct() -> PrintTraceParams {
         return PrintTraceParams(
-            warp_size: warpSize,
-            real_world_size_mm: realWorldSizeMM,
+            lightbox_width_px: lightboxWidthPx,
+            lightbox_height_px: lightboxHeightPx,
+            lightbox_width_mm: lightboxWidthMM,
+            lightbox_height_mm: lightboxHeightMM,
+            pixels_per_mm: pixelsPerMM,
             canny_lower: cannyLower,
             canny_upper: cannyUpper,
             canny_aperture: cannyAperture,
@@ -445,6 +452,8 @@ private extension ProcessingParameters {
             dilation_amount_mm: dilationAmountMM,
             enable_smoothing: enableSmoothing,
             smoothing_amount_mm: smoothingAmountMM,
+            smoothing_mode: smoothingMode,
+            enable_inpainting: enableInpainting,
             enable_debug_output: enableDebugOutput
         )
     }
